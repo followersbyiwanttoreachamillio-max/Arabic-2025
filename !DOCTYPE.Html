@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="he">
+<head>
+<meta charset="UTF-8">
+<title>שאילון - כתב ערבי + תנועות</title>
+<style>
+  body {
+    font-family: Arial, sans-serif;
+    background: linear-gradient(to bottom, #f8fafc, #fff);
+    display: flex;
+    justify-content: center;
+    padding: 20px;
+  }
+  .container {
+    max-width: 600px;
+    width: 100%;
+  }
+  h1 { font-size: 24px; margin-bottom: 5px; }
+  .question-box {
+    background: white;
+    border-radius: 16px;
+    padding: 20px;
+    margin-bottom: 20px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    text-align: center;
+    transition: transform 0.3s;
+  }
+  .question-box.animate {
+    transform: scale(1.05);
+  }
+  .letter { font-size: 80px; margin-bottom: 10px; }
+  .options { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px; }
+  button.option {
+    padding: 10px;
+    border-radius: 8px;
+    border: 1px solid #ccc;
+    cursor: pointer;
+    background: white;
+    transition: background 0.2s;
+  }
+  button.option.correct { background: #d1fae5; border-color: #10b981; }
+  button.option.wrong { background: #fee2e2; border-color: #ef4444; }
+  .footer { font-size: 12px; margin-top: 10px; text-align: center; color: #64748b; }
+  .score { margin-top: 10px; font-weight: bold; }
+  .controls { display: flex; justify-content: space-between; margin-bottom: 10px; }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>שאילון - כתב ערבי + תנועות</h1>
+  <div class="controls">
+    <button id="musicBtn">נגן מוזיקה</button>
+    <button id="restartBtn">אתחול שאילון</button>
+  </div>
+  <div id="questionBox" class="question-box">
+    <div id="letter" class="letter"></div>
+    <div id="questionText"></div>
+    <div id="options" class="options"></div>
+  </div>
+  <div class="score" id="scoreText"></div>
+  <div class="footer">טיפ: השתמש בכפתורים כדי להדליק מוזיקה ולהתקדם לשאלה הבאה. הצלילים נוצרים מקומית בדפדפן.</div>
+</div>
+
+<script>
+const LETTERS = [
+  { letter: "ا", name: "אליף" },
+  { letter: "ب", name: "באא" },
+  { letter: "ت", name: "תאא" },
+  { letter: "ث", name: "ת'אא" },
+  { letter: "ج", name: "ג'ים" },
+  { letter: "ح", name: "חא" },
+  { letter: "خ", name: "ח'א" },
+  { letter: "د", name: "דאל" },
+  { letter: "ذ", name: "ז'אל" },
+  { letter: "ر", name: "רא" },
+  { letter: "ز", name: "זין" },
+  { letter: "س", name: "סין" },
+  { letter: "ش", name: "שין" },
+  { letter: "ص", name: "סאד" },
+  { letter: "ض", name: "דאד" },
+  { letter: "ط", name: "טא" },
+  { letter: "ظ", name: "זא" },
+  { letter: "ع", name: "עין" },
+  { letter: "غ", name: "ע'ין" },
+  { letter: "ف", name: "פא" },
+  { letter: "ق", name: "קאף" },
+  { letter: "ك", name: "כאפ" },
+  { letter: "ل", name: "לאם" },
+  { letter: "م", name: "מים" },
+  { letter: "ن", name: "נון" },
+  { letter: "ه", name: "הא" },
+  { letter: "و", name: "ואו" },
+  { letter: "ي", name: "יא" },
+];
+
+const VOWELS = [
+  { mark: "◌َ", name: "פתחַה (a)" },
+  { mark: "◌ِ", name: "כסרה (i)" },
+  { mark: "◌ُ", name: "דַ'מַּה (u)" },
+  { mark: "◌ْ", name: "סֻכוּן" },
+  { mark: "◌ّ", name: "שַדַּה" },
+];
+
+function shuffleArray(arr) {
+  return arr.sort(() => Math.random() - 0.5);
+}
+
+function buildQuestions() {
+  const questions = [];
+  LETTERS.forEach(L => {
+    const options = shuffleArray([
+      L.name,
+      LETTERS[Math.floor(Math.random()*LETTERS.length)].name,
+      LETTERS[Math.floor(Math.random()*LETTERS.length)].name,
+      LETTERS[Math.floor(Math.random()*LETTERS.length)].name
+    ]);
+    if (!options.includes(L.name)) options[0] = L.name;
+    questions.push({ type: "letter", letter: L.letter, q: "מה האות הזו?", options, answer: L.name });
+  });
+  VOWELS.forEach(V => {
+    const options = shuffleArray([
+      V.name,
+      VOWELS[Math.floor(Math.random()*VOWELS.length)].name,
+      VOWELS[Math.floor(Math.random()*VOWELS.length)].name,
+      VOWELS[Math.floor(Math.random()*VOWELS.length)].name
+    ]);
+    if (!options.includes(V.name)) options[0] = V.name;
+    questions.push({ type: "vowel", letter: V.mark, q: "מה התנועה הזו?", options, answer: V.name });
+  });
+  return shuffleArray(questions);
+}
+
+let questions = buildQuestions();
+let current = 0;
+let score = 0;
+let audioCtx = null;
+let musicInterval = null;
+let musicOn = false;
+
+const letterEl = document.getElementById('letter');
+const questionTextEl = document.getElementById('questionText');
+const optionsEl = document.getElementById('options');
+const scoreTextEl = document.getElementById('scoreText');
+const questionBoxEl = document.getElementById('questionBox');
+
+function ensureAudio() {
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  return audioCtx;
+}
+
+function playTone(freq, duration=0.12) {
+  const ctx = ensureAudio();
+  const o = ctx.createOscillator();
+  const g = ctx.createGain();
+  o.type = "sine";
+  o.frequency.value = freq;
+  g.gain.setValueAtTime(0.0001, ctx.currentTime);
+  g.gain.exponentialRampToValueAtTime(0.12, ctx.currentTime+0.02);
+  o.connect(g);
+  g.connect(ctx.destination);
+  o.start();
+  g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime+duration);
+  o.stop(ctx.currentTime+duration+0.02);
+}
+
+function playCorrect() { playTone(880,0.08); setTimeout(()=>playTone(1100,0.08),90); }
+function playWrong() { playTone(220,0.2); }
+
+function startMusic() {
+  if (musicInterval) return;
+  const melody = [440,494,523,587,659];
+  let i = 0;
+  musicInterval = setInterval(()=>{
+    playTone(melody[i%melody.length],0.18);
+    i++;
+  },300);
+  musicOn = true;
+  document.getElementById('musicBtn').textContent = 'עצור מוזיקה';
+}
+
+function stopMusic() {
+  if (musicInterval) clearInterval(musicInterval);
+  musicInterval = null;
+  musicOn = false;
+  document.getElementById('musicBtn').textContent = 'נגן מוזיקה';
+}
+
+function showQuestion() {
+  const q = questions[current];
+  letterEl.textContent = q.letter;
+  questionTextEl.textContent = q.q;
+  optionsEl.innerHTML = '';
+  questionBoxEl.classList.add('animate');
+  setTimeout(()=>questionBoxEl.classList.remove('animate'),300);
+  q.options.forEach(opt=>{
+    const btn = document.createElement('button');
+    btn.className = 'option';
+    btn.textContent = opt;
+    btn.onclick = () => selectOption(btn,opt);
+    optionsEl.appendChild(btn);
+  });
+  scoreTextEl.textContent = `ציון: ${score}/${questions.length}`;
+}
+
+function selectOption(btn,opt) {
+  const q = questions[current];
+  if ([...optionsEl.children].some(b=>b.disabled)) return; // כבר ענה
+  if (opt === q.answer) {
+    btn.classList.add('correct');
+    score++;
+    playCorrect();
+  } else {
+    btn.classList.add('wrong');
+    playWrong();
+    [...optionsEl.children].forEach(b=>{
+      if(b.textContent === q.answer) b.classList.add('correct');
+    });
+  }
+  [...optionsEl.children].forEach(b=>b.disabled=true);
+  setTimeout(nextQuestion, 1000);
+}
+
+function nextQuestion() {
+  if(current+1<questions.length){
+    current++;
+    showQuestion();
+  } else {
+    alert(`סיימת! הציון שלך: ${score}/${questions.length}`);
+    restart();
+  }
+}
+
+function restart() {
+  questions = buildQuestions();
+  current = 0;
+  score = 0;
+  showQuestion();
+}
+
+document.getElementById('musicBtn').onclick = ()=>{
+  musicOn ? stopMusic() : startMusic();
+}
+document.getElementById('restartBtn').onclick = restart;
+
+showQuestion();
+</script>
+</body>
+</html>
